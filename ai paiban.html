@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 排版美化 1:1 复刻版</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* 页面基础重置 */
+        body { background-color: #f3f4f6; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        
+        /* 隐藏滚动条 */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 动画定义 */
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-in forwards; }
+
+        /* 模拟手机屏幕比例 */
+        .phone-container {
+            width: 390px;
+            height: 844px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 8px solid #1a1a1a;
+            border-radius: 40px;
+            position: relative;
+            background: white;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 灵动岛 */
+        .notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 30px;
+            background: #1a1a1a;
+            border-bottom-left-radius: 18px;
+            border-bottom-right-radius: 18px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // 兼容性处理：从全局对象获取 React 方法
+        const { useState, useEffect, useMemo } = React;
+
+        /**
+         * 修复图标组件
+         * CDN 版 lucide 会将图标放在 window.lucide.icons 下
+         */
+        const LucideIcon = ({ name, className = "w-5 h-5", onClick }) => {
+            const iconName = name.charAt(0).toUpperCase() + name.slice(1);
+            const IconComponent = window.lucide[iconName] || window.lucide.icons[iconName];
+            
+            useEffect(() => {
+                window.lucide.createIcons();
+            }, [name]);
+
+            if (!IconComponent) return <span className="text-xs text-red-500">?</span>;
+
+            return (
+                <div onClick={onClick} className={`${className} flex items-center justify-center`}>
+                    <i data-lucide={name.replace(/([A-Z])/g, '-$1').toLowerCase().replace(/^-/, '')}></i>
+                </div>
+            );
+        };
+
+        function App() {
+            const [appState, setAppState] = useState('empty');
+            const [isLoading, setIsLoading] = useState(false);
+            const [loadingText, setLoadingText] = useState('');
+            const [documentText, setDocumentText] = useState('');
+            const [prefs, setPrefs] = useState({ fontStyle: '', layout: '', feature: '', scenario: '' });
+            const [activeBottomSheetTemplate, setActiveBottomSheetTemplate] = useState('t2');
+
+            const sampleText = `上个周末，爸爸妈妈带我去了动物园，那真是一次愉快的旅行！\n一进动物园，我就看到好多可爱的动物。长颈鹿伸着长长的脖子吃树叶，斑马身上有黑白条纹，像穿了一件漂亮的衣服。最有趣的是猴子，它们在树上跳来跳去，还做鬼脸逗我们笑。我还亲手喂了小山羊，它用软软的舌头舔我的手，痒痒的，我忍不住咯咯笑。\n中午，我们在草地上野餐。妈妈准备了美味的三明治和水果，我一边吃一边看孔雀开屏，它的羽毛像一把五彩的大扇子，美极了！\n下午，我们还去看了海豚表演。聪明的海豚会顶球、跳水，还会跟着音乐跳舞，观众们都使劲鼓掌。\n太阳下山了，我们才依依不舍地离开。这次旅行让我认识了许多动物，也学到了知识。我拉着爸爸妈妈的手说：“下次还要再来！”`;
+
+            // Actions
+            const handleSimulatePaste = () => { setDocumentText(sampleText); setAppState('paste_prompt'); };
+            const handleConfirmPaste = () => {
+                setIsLoading(true); setLoadingText('正在为你推荐模版...');
+                setTimeout(() => { setIsLoading(false); setAppState('preferences'); }, 800);
+            };
+            const handleGenerateList = () => {
+                setIsLoading(true); setLoadingText('正在生成排版模版...');
+                setTimeout(() => { setIsLoading(false); setAppState('template_list'); }, 1200);
+            };
+            const handleSelectFromList = () => {
+                setIsLoading(true); setLoadingText('正在应用排版...');
+                setTimeout(() => { setIsLoading(false); setAppState('wysiwyg'); setActiveBottomSheetTemplate('t2'); }, 1000);
+            };
+            const resetDemo = () => {
+                setAppState('empty'); setDocumentText(''); setPrefs({ fontStyle: '', layout: '', feature: '', scenario: '' });
+            };
+
+            // 渲染组件
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="phone-container">
+                        <div className="notch"></div>
+                        
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 z-10 pt-8">
+                            <div className="flex items-center space-x-3">
+                                <LucideIcon name="ChevronLeft" className="w-6 h-6 cursor-pointer" onClick={appState === 'wysiwyg' ? resetDemo : undefined} />
+                                <span className="text-lg font-medium truncate w-32">{documentText ? '愉快的旅行' : '无标题文档'}</span>
+                            </div>
+                            <div className="flex space-x-3 text-gray-400">
+                                <LucideIcon name="User" />
+                                <LucideIcon name="Share" />
+                                <LucideIcon name="MoreHorizontal" />
+                            </div>
+                        </div>
+
+                        {/* Editor Content */}
+                        <div className={`flex-1 overflow-y-auto bg-white p-5 ${appState === 'wysiwyg' ? (activeBottomSheetTemplate === 't1' ? 'leading-loose px-8' : activeBottomSheetTemplate === 't2' ? 'leading-relaxed font-serif' : 'leading-tight text-sm px-3') : ''}`}>
+                            {documentText ? (
+                                <div className="whitespace-pre-wrap text-gray-800 transition-all">
+                                    {appState === 'wysiwyg' && activeBottomSheetTemplate && (
+                                        <div className="text-center mb-6">
+                                            <h1 className="text-2xl font-bold mb-4">愉快的旅行</h1>
+                                            {activeBottomSheetTemplate === 't2' && <div className="w-12 h-1 bg-blue-500 mx-auto rounded-full"></div>}
+                                        </div>
+                                    )}
+                                    {documentText}
+                                    {appState === 'wysiwyg' && <div className="h-64"></div>}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-gray-300">
+                                    <LucideIcon name="AlignLeft" className="w-16 h-16 mb-4 opacity-20" />
+                                    <button onClick={handleSimulatePaste} className="px-6 py-2 bg-blue-50 text-blue-600 rounded-full font-medium">模拟粘贴文本</button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* App States Overlay */}
+                        {appState === 'paste_prompt' && (
+                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center px-8">
+                                <div className="bg-white rounded-2xl w-full animate-fade-in overflow-hidden shadow-xl">
+                                    <div className="p-6 text-center">
+                                        <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <LucideIcon name="Zap" className="text-blue-500" />
+                                        </div>
+                                        <h3 className="text-lg font-bold mb-2">是否一键排版美化？</h3>
+                                        <p className="text-sm text-gray-500">检测到较多文本，AI可自动调整排版</p>
+                                    </div>
+                                    <div className="flex border-t">
+                                        <button onClick={() => setAppState('empty')} className="flex-1 py-4 text-gray-500 border-r">取消</button>
+                                        <button onClick={handleConfirmPaste} className="flex-1 py-4 text-blue-600 font-bold">确定</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {appState === 'preferences' && (
+                            <div className="absolute inset-0 bg-white z-40 flex flex-col animate-slide-up">
+                                <div className="p-4 border-b flex justify-between items-center pt-8">
+                                    <div className="w-6"></div>
+                                    <h2 className="font-bold">AI排版美化</h2>
+                                    <LucideIcon name="X" className="text-gray-400" onClick={() => setAppState('empty')} />
+                                </div>
+                                <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+                                    <p className="text-gray-400 text-sm">正在为你推荐模版...你可以选择一些偏好：</p>
+                                    {[['字体风格', ['活泼', '自然', '严肃', '整齐'], 'fontStyle'], ['排版要求', ['常规', '紧凑', '宽松'], 'layout']].map(([title, opts, key]) => (
+                                        <div key={key}>
+                                            <h4 className="text-sm font-medium mb-3">{title}：</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {opts.map(o => (
+                                                    <button key={o} onClick={() => setPrefs({...prefs, [key]: o})} className={`px-4 py-1.5 rounded-md border text-sm ${prefs[key] === o ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600'}`}>{o}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="p-4 border-t"><button onClick={handleGenerateList} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">确认偏好并生成</button></div>
+                            </div>
+                        )}
+
+                        {appState === 'template_list' && (
+                            <div className="absolute inset-0 bg-white z-40 flex flex-col animate-slide-up">
+                                <div className="p-4 border-b flex justify-between items-center pt-8">
+                                    <LucideIcon name="ChevronLeft" onClick={() => setAppState('preferences')} />
+                                    <h2 className="font-bold">AI排版美化</h2>
+                                    <LucideIcon name="X" onClick={() => setAppState('empty')} />
+                                </div>
+                                <div className="flex-1 p-6 bg-gray-50 space-y-4 overflow-y-auto">
+                                    {['华文新魏', '楷体', '宋体'].map((name, i) => (
+                                        <div key={name} onClick={handleSelectFromList} className="bg-white p-4 rounded-xl flex gap-4 shadow-sm border border-transparent active:border-blue-500">
+                                            <div className="w-20 h-24 bg-gray-100 rounded border flex flex-col p-2 gap-1 opacity-40">
+                                                <div className="h-1 bg-gray-400 w-full"></div>
+                                                <div className="h-1 bg-gray-400 w-3/4"></div>
+                                                <div className="h-1 bg-gray-400 w-full"></div>
+                                            </div>
+                                            <div className="flex-1 flex flex-col justify-center">
+                                                <h4 className="font-bold">{name}</h4>
+                                                <p className="text-xs text-gray-500 mt-1">自然段分段，字体采用{name}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {appState === 'wysiwyg' && (
+                            <div className="absolute bottom-0 inset-x-0 bg-white rounded-t-3xl shadow-2xl z-30 animate-slide-up border-t">
+                                <div className="flex justify-between p-4 border-b">
+                                    <span className="font-bold">通用</span>
+                                    <LucideIcon name="X" className="text-gray-300" onClick={() => setAppState('empty')} />
+                                </div>
+                                <div className="p-5 flex gap-4 overflow-x-auto hide-scrollbar pb-10">
+                                    {[{id:'t1', n:'宽松模版'},{id:'t2', n:'通用模版', ai:true},{id:'t3', n:'紧凑模版', ai:true}].map(t => (
+                                        <div key={t.id} onClick={() => setActiveBottomSheetTemplate(activeBottomSheetTemplate === t.id ? null : t.id)} className={`flex-shrink-0 w-28 h-36 rounded-xl border-2 relative transition-all ${activeBottomSheetTemplate === t.id ? 'border-blue-500 bg-blue-50/50' : 'border-gray-100'}`}>
+                                            {t.ai && <div className="absolute top-2 right-2"><LucideIcon name="Zap" className="w-3 h-3 text-blue-500 fill-blue-500" /></div>}
+                                            {activeBottomSheetTemplate === t.id && <div className="absolute -top-2 -right-2 bg-blue-500 rounded-full p-1"><LucideIcon name="Check" className="w-3 h-3 text-white" /></div>}
+                                            <div className="p-3 opacity-20 flex flex-col gap-1 mt-4">
+                                                <div className="h-1.5 bg-gray-600 rounded w-3/4 mx-auto"></div>
+                                                <div className="h-1 bg-gray-400 rounded w-full"></div>
+                                                <div className="h-1 bg-gray-400 rounded w-full"></div>
+                                            </div>
+                                            <div className="absolute bottom-0 inset-x-0 py-2 text-center text-xs font-bold border-t border-gray-100">{t.n}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {isLoading && (
+                            <div className="absolute inset-0 bg-white/90 z-[100] flex flex-col items-center justify-center animate-fade-in">
+                                <LucideIcon name="Loader2" className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+                                <p className="font-medium text-gray-600">{loadingText}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="fixed top-8 right-8 bg-white/80 backdrop-blur-md p-6 rounded-2xl shadow-xl max-w-xs border border-white hidden lg:block">
+                        <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2">
+                            <span className="w-2 h-6 bg-blue-500 rounded-full"></span> 操作说明
+                        </h3>
+                        <div className="space-y-3 text-sm text-gray-600">
+                            <p>1. 点击 <b>“模拟粘贴文本”</b></p>
+                            <p>2. 在拦截弹窗中点击 <b>“确定”</b></p>
+                            <p>3. 选择偏好并 <b>“生成”</b></p>
+                            <p>4. 选中推荐模版进入 <b>WYSIWYG 模式</b></p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
